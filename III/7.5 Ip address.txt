@@ -1,0 +1,47 @@
+#include <iostream>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <cstring>
+
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <URL>" << std::endl;
+        return -1;
+    }
+
+    const char *url = argv[1];
+
+    struct addrinfo *result;
+    struct addrinfo hints;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    int status = getaddrinfo(url, NULL, &hints, &result);
+    if (status != 0) {
+        std::cerr << "getaddrinfo error: " << gai_strerror(status) << std::endl;
+        return -1;
+    }
+
+    for (struct addrinfo *res = result; res != NULL; res = res->ai_next) {
+        void *addr;
+        char ipstr[INET6_ADDRSTRLEN];
+
+        if (res->ai_family == AF_INET) { // IPv4
+            struct sockaddr_in *ipv4 = (struct sockaddr_in *)res->ai_addr;
+            addr = &(ipv4->sin_addr);
+        } else { // IPv6
+            struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)res->ai_addr;
+            addr = &(ipv6->sin6_addr);
+        }
+
+
+        inet_ntop(res->ai_family, addr, ipstr, sizeof(ipstr));
+        std::cout << "IP address: " << ipstr << std::endl;
+    }
+
+    freeaddrinfo(result);
+
+    return 0;
+}

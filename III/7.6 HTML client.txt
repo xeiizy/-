@@ -1,0 +1,56 @@
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <curl/curl.h>
+
+size_t writeCallback(void *contents, size_t size, size_t nmemb, std::stringstream *stream) {
+    stream->write(static_cast<char *>(contents), size * nmemb);
+    return size * nmemb;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <URL>" << std::endl;
+        return -1;
+    }
+
+    const char *url = argv[1];
+
+    CURL *curl;
+    CURLcode res;
+
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
+    std::stringstream htmlContentStream;
+
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &htmlContentStream);
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        } else {
+            std::cout << "Page downloaded successfully." << std::endl;
+
+            std::ofstream outFile("downloaded_page.html");
+            if (outFile.is_open()) {
+                outFile << htmlContentStream.str();
+                outFile.close();
+                std::cout << "Page saved as 'downloaded_page.html'" << std::endl;
+            } else {
+                std::cerr << "Failed to create/open the file." << std::endl;
+            }
+
+            std::cout << "Page content:" << std::endl;
+            std::cout << htmlContentStream.str() << std::endl;
+        }
+
+        curl_easy_cleanup(curl);
+    }
+
+    curl_global_cleanup();
+
+    return 0;
+}

@@ -1,0 +1,158 @@
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include <libxml/HTMLparser.h>
+#include <libxml/tree.h>
+#include <sstream>
+#include <stack>
+#include <fstream>
+#include <set>
+
+typedef std::string item_type;
+
+typedef struct tree {
+    item_type item;
+    std::unordered_map<int, std::vector<int>> positions;
+    struct tree* parent;
+    struct tree* left;
+    struct tree* right;
+} tree;
+
+struct CompareStrings {
+    bool operator()(const std::string& a, const std::string& b) const {
+        // Case-insensitive comparison
+        size_t i = 0;
+        while (i < a.length() && i < b.length()) {
+            if (std::tolower(a[i]) != std::tolower(b[i])) {
+                return std::tolower(a[i]) < std::tolower(b[i]);
+            }
+            i++;
+        }
+        return (a.length() != b.length()) ? (a.length() < b.length()) : false;
+    }
+};;
+
+void add_tree(tree** t, item_type item, tree* parent, int line_number, int position) {
+    tree* p;
+    if (*t == NULL) {
+        p = new tree();
+        p->left = p->right = NULL;
+        p->parent = parent;
+        p->item = item;
+        p->positions[line_number].push_back(position);
+        *t = p;
+        return;
+    }
+
+    if (item < (*t)->item) {
+        add_tree(&((*t)->left), item, *t, line_number, position);
+    } else {
+        add_tree(&((*t)->right), item, *t, line_number, position);
+    }
+}
+
+void tokenizeText(const char* text, std::vector<std::string>& tokens) {
+    std::istringstream iss(text);
+    std::string word;
+    while (iss >> word) {
+
+        word.erase(std::remove_if(word.begin(), word.end(), [](char c) { return !std::isalnum(c); }), word.end());
+        if (!word.empty()) {
+            tokens.push_back(word);
+        }
+    }
+}
+
+void extractTextFromHTML(const char* filename, tree** root) {
+    std::ifstream file(filename);
+    if (!file) {
+        std::cerr << "Failed to open the file " << filename << std::endl;
+        return;
+    }
+
+    std::string line;
+    int line_number = 1;
+    while (std::getline(file, line)) {
+
+        xmlDocPtr doc = htmlReadMemory(line.c_str(), line.size(), nullptr, nullptr, HTML_PARSE_NOBLANKS | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING);
+        if (doc != nullptr) {
+            xmlNodePtr cur = xmlDocGetRootElement(doc);
+            if (cur != nullptr) {
+                cur = cur->xmlChildrenNode;
+                while (cur != nullptr) {
+                    if (cur->type == XML_ELEMENT_NODE) {
+                        xmlChar* content = xmlNodeGetContent(cur);
+                        std::vector<std::string> tokens;
+                        tokenizeText(reinterpret_cast<char*>(content), tokens);
+
+                        for (const auto& token : tokens) {
+                            add_tree(root, token, nullptr, line_number, 0); // Assuming position as 0
+                        }
+
+                        xmlFree(content);
+                    }
+                    cur = cur->next;
+                }
+            }
+            xmlFreeDoc(doc);
+        }
+
+        line_number++;
+    }
+
+    file.close();
+}
+
+
+void printReverseIndex(tree* t) {
+    if (t == nullptr) return;
+
+    std::set<std::string, CompareStrings, std::allocator<std::string>> sortedWords;
+    std::unordered_map<std::string, std::vector<int>> wordPositions;
+
+    std::stack<tree*> nodes;
+    nodes.push(t);
+    while (!nodes.empty()) {
+        tree* current = nodes.top();
+        nodes.pop();
+
+        if (current != nullptr) {
+            // Process the word and its positions
+            std::string word = current->item;
+            for (const auto& pair : current->positions) {
+                for (int pos : pair.second) {
+                    wordPositions[word].push_back(pair.first); // Store line number for the word
+                }
+            }
+            sortedWords.insert(word);
+            // Traverse left and right subtrees
+            nodes.push(current->left);
+            nodes.push(current->right);
+        }
+    }
+
+    // Print the sorted index
+    for (const auto& word : sortedWords) {
+        std::cout << word << " - ";
+        for (size_t i = 0; i < wordPositions[word].size(); ++i) {
+            if (i > 0) {
+                std::cout << ", ";
+            }
+            std::cout << "Line " << wordPositions[word][i];
+        }
+        std::cout << std::endl;
+    }
+}
+
+int main() {
+    tree* root = nullptr;
+    const char* filename = "/Users/moldovexc/CLionProjects/string_binary/input.txt";
+
+    extractTextFromHTML(filename, &root);
+
+    std::cout << "Reverse Index:" << std::endl;
+    printReverseIndex(root);
+
+    return 0;
+}
